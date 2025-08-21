@@ -264,6 +264,9 @@ def compute_text_projection(
             for a, b in zip(proj.knn_indices, proj.knn_distances)
         ]
 
+    print(f"done computing text projection in compute_text_projection with model {model}")
+    print("first row: ", data_frame.iloc[0].to_dict())
+
 
 def compute_vector_projection(
     data_frame: pd.DataFrame,

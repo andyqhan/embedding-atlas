@@ -108,7 +108,8 @@
   let minimumDensityExpFactor: number = $state(0);
   
   // Model selection state
-  let selectedModel: string = $state("all-MiniLM-L6-v2");
+ let selectedModel: string = $state("all-MiniLM-L6-v2");
+ //   let selectedModel: string = $state("Qwen/Qwen3-Embedding-0.6B");
   let isComputingEmbeddings: boolean = $state(false);
   let embeddingComputationStatus: string = $state("");
   let defaultViewportScale = $derived(
@@ -339,7 +340,6 @@
       console.error("Failed to compute embeddings:", error);
       // Revert model selection on error
       selectedModel = selectedModel; // Keep the previous value
-      alert(`Failed to compute embeddings: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       isComputingEmbeddings = false;
     }

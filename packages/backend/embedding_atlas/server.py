@@ -36,7 +36,7 @@ def make_server(
         expose_headers=["*"],
     )
 
-    mount_bytes(
+    clear_dataset_cache = mount_bytes(
         app,
         "/data/dataset.parquet",
         "application/octet-stream",
@@ -215,6 +215,10 @@ def make_server(
             else:
                 neighbors_column = find_column_name(data_source.dataset.columns, "__neighbors")
             
+            # Debug: Check first row before computation
+            first_row_before = data_source.dataset.iloc[0].to_dict()
+            print(f"First row BEFORE embedding computation: {first_row_before}")
+            
             # Compute new embeddings and projections
             compute_text_projection(
                 data_source.dataset,
@@ -228,6 +232,10 @@ def make_server(
                 umap_args=umap_args,
             )
             
+            # Debug: Check first row after computation
+            first_row_after = data_source.dataset.iloc[0].to_dict()
+            print(f"First row AFTER embedding computation: {first_row_after}")
+            
             # Update metadata
             data_source.update_embedding_metadata({
                 "x": x_column,
@@ -236,6 +244,14 @@ def make_server(
             
             # Clear the connection cache to reflect updated dataset
             get_connection.cache_clear()
+            
+            # Clear the dataset.parquet cache to reflect updated dataset
+            clear_dataset_cache()
+            print("Cleared dataset cache")
+            
+            # Debug: Test that parquet bytes are actually different
+            parquet_bytes = to_parquet_bytes(data_source.dataset)
+            print(f"Parquet bytes length after clearing cache: {len(parquet_bytes)}")
             
             return JSONResponse({
                 "success": True,
@@ -297,7 +313,10 @@ def mount_bytes(
 ):
     @lru_cache(maxsize=1)
     def get_content() -> bytes:
-        return make_content()
+        print("mount_bytes: Generating fresh content")
+        content = make_content()
+        print(f"mount_bytes: Generated {len(content)} bytes")
+        return content
 
     @app.head(url)
     async def head(request: Request):
@@ -311,6 +330,9 @@ def mount_bytes(
             headers={
                 "Content-Length": str(length),
                 "Content-Type": media_type,
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
             }
         )
 
@@ -319,7 +341,14 @@ def mount_bytes(
         content = get_content()
         bytes_range = parse_range_header(request, len(content))
         if bytes_range is None:
-            return Response(content=content)
+            return Response(
+                content=content,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache", 
+                    "Expires": "0",
+                }
+            )
         else:
             r0, r1 = bytes_range
             result = content[r0:r1]
@@ -329,7 +358,13 @@ def mount_bytes(
                     "Content-Length": str(r1 - r0),
                     "Content-Range": f"bytes {r0}-{r1 - 1}/{len(content)}",
                     "Content-Type": media_type,
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
                 },
                 media_type=media_type,
                 status_code=206,
             )
+    
+    # Return the cache clearing function
+    return get_content.cache_clear
