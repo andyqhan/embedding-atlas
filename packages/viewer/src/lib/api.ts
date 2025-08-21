@@ -62,6 +62,9 @@ export interface EmbeddingAtlasProps {
   /** A callback to download the application as archive */
   onExportApplication?: (() => Promise<void>) | null;
 
+  /** A callback to compute new embeddings with a different model */
+  onComputeEmbeddings?: ((model: string, textColumn: string) => Promise<void>) | null;
+
   /** A callback when the state of the viewer changes. You may serialize the state to JSON and load it back. */
   onStateChange?: ((state: EmbeddingAtlasState) => void) | null;
 }

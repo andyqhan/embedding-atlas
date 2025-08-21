@@ -63,6 +63,7 @@
     textColumn,
     onExportApplication,
     onExportSelection,
+    onComputeEmbeddings,
     onStateChange,
     initialState,
     searcher: specifiedSearcher,
@@ -105,6 +106,11 @@
 
   let embeddingViewMode: "points" | "density" = $state("points");
   let minimumDensityExpFactor: number = $state(0);
+  
+  // Model selection state
+  let selectedModel: string = $state("all-MiniLM-L6-v2");
+  let isComputingEmbeddings: boolean = $state(false);
+  let embeddingComputationStatus: string = $state("");
   let defaultViewportScale = $derived(
     projectionColumns != null ? tableInfo.defaultViewportScale(projectionColumns.x, projectionColumns.y) : null,
   );
@@ -314,6 +320,31 @@
     setCategoryColumn(selectedCategoryColumn);
   });
 
+  // Model selection handler
+  async function handleModelChange(model: string) {
+    if (!onComputeEmbeddings || !textColumn || isComputingEmbeddings) {
+      return;
+    }
+
+    try {
+      isComputingEmbeddings = true;
+      embeddingComputationStatus = `Computing embeddings with ${model}...`;
+      selectedModel = model;
+      
+      await onComputeEmbeddings(model, textColumn);
+      
+      embeddingComputationStatus = "";
+    } catch (error) {
+      embeddingComputationStatus = "";
+      console.error("Failed to compute embeddings:", error);
+      // Revert model selection on error
+      selectedModel = selectedModel; // Keep the previous value
+      alert(`Failed to compute embeddings: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      isComputingEmbeddings = false;
+    }
+  }
+
   // Animation
 
   async function animateEmbeddingViewToPoint(identifier?: any, x?: number, y?: number) {
@@ -509,6 +540,24 @@
         </div>
         <div class="flex flex-row items-center gap-3">
           {#if showEmbedding}
+            {#if onComputeEmbeddings && textColumn}
+              <Select
+                label="Model"
+                value={selectedModel}
+                onChange={handleModelChange}
+                disabled={isComputingEmbeddings}
+                options={[
+                  { value: "all-MiniLM-L6-v2", label: "all-MiniLM-L6-v2" },
+                  { value: "Qwen/Qwen3-Embedding-0.6B", label: "Qwen3-Embedding-0.6B" },
+                  { value: "ibm-granite/granite-embedding-english-r2", label: "Granite Embedding" }
+                ]}
+              />
+              {#if isComputingEmbeddings}
+                <div class="text-sm text-slate-500 dark:text-slate-400">
+                  {embeddingComputationStatus}
+                </div>
+              {/if}
+            {/if}
             <Select
               label="Color"
               value={selectedCategoryColumn}

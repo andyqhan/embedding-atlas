@@ -13,6 +13,8 @@
   import { debounce } from "./lib/utils.js";
   import { getQueryPayload, setQueryPayload } from "./query_payload.js";
 
+  import * as SQL from "@uwdata/mosaic-sql";
+
   const coordinator = defaultCoordinator();
 
   interface Props {
@@ -54,6 +56,35 @@
     }
   }
 
+  async function onComputeEmbeddings(model: string, textColumn: string) {
+    if (dataSource.computeEmbeddings && 'metadata' in dataSource) {
+      await dataSource.computeEmbeddings(model, textColumn);
+      
+      // Refresh the metadata to get updated column information
+      const metadata = await (dataSource as any).metadata();
+      columns = metadata.columns;
+      
+      // Reload the dataset to reflect the new embeddings
+      const oldFirstRow = await coordinator.query(SQL.Query.from("dataset").select("*").limit(1));
+      const oFR = oldFirstRow.get(0);
+      console.log("In onComputeEmbeddings, first row of old dataset:", oFR);
+
+      if ('serverUrl' in dataSource) {
+        const serverUrl = (dataSource as any).serverUrl;
+        const datasetUrl = serverUrl + (serverUrl.endsWith('/') ? '' : '/') + 'dataset.parquet';
+        
+        await coordinator.exec(`
+          DROP TABLE IF EXISTS dataset;
+          CREATE TABLE dataset AS (SELECT * FROM read_parquet('${datasetUrl}'));
+        `);
+
+        const newFirstRow = await coordinator.query(SQL.Query.from("dataset").select("*").limit(1));
+        const nFR = oldFirstRow.get(0);
+        console.log("In onComputeEmbeddings, first row of new dataset:", nFR);
+      }
+    }
+  }
+
   function onStateChange(state: EmbeddingAtlasState) {
     setQueryPayload({ ...state, predicate: undefined });
   }
@@ -73,6 +104,7 @@
       automaticLabels={true}
       onExportApplication={dataSource.downloadArchive ? onDownloadArchive : null}
       onExportSelection={dataSource.downloadSelection ? onExportSelection : null}
+      onComputeEmbeddings={dataSource.computeEmbeddings ? onComputeEmbeddings : null}
       onStateChange={debounce(onStateChange, 200)}
     />
   {:else}

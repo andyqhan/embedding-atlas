@@ -101,7 +101,7 @@ export class BackendDataSource implements DataSource {
     return resp;
   }
 
-  private async metadata(): Promise<Metadata> {
+  async metadata(): Promise<Metadata> {
     try {
       return await this.fetchEndpoint("metadata.json").then((x) => x.json());
     } catch (e) {
@@ -126,6 +126,37 @@ export class BackendDataSource implements DataSource {
     } catch (e) {
       // Ignore set cache errors.
     }
+  }
+
+  async computeEmbeddings(
+    model: string, 
+    textColumn: string, 
+    options: {
+      trustRemoteCode?: boolean;
+      batchSize?: number;
+      umapArgs?: Record<string, any>;
+    } = {}
+  ) {
+    const response = await this.fetchEndpoint("embedding", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        text_column: textColumn,
+        trust_remote_code: options.trustRemoteCode ?? false,
+        batch_size: options.batchSize ?? 32,
+        umap_args: options.umapArgs ?? {},
+      }),
+    });
+    
+    if (response.status !== 200) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to compute embeddings");
+    }
+    
+    return response.json();
   }
 
   cache = {

@@ -35,6 +35,22 @@ class DataSource:
         else:
             return None
 
+    def update_embedding_metadata(self, embedding_coords: dict, neighbors_column: str, text_column: str):
+        """Update metadata to reflect new embedding projections"""
+        if "columns" not in self.metadata:
+            self.metadata["columns"] = {}
+        
+        # Update embedding coordinates
+        self.metadata["columns"]["embedding"] = embedding_coords
+        
+        # Update neighbors column
+        if neighbors_column:
+            self.metadata["columns"]["neighbors"] = neighbors_column
+        
+        # Update text column if specified
+        if text_column:
+            self.metadata["columns"]["text"] = text_column
+
     def make_archive(self, static_path: str):
         io = BytesIO()
         with zipfile.ZipFile(io, "w", zipfile.ZIP_DEFLATED) as zip:

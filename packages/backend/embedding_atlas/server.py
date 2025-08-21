@@ -167,6 +167,106 @@ def make_server(
             executor, lambda: handle_selection(data)
         )
 
+    def handle_embedding(request_data: dict):
+        from .projection import compute_text_projection
+        
+        try:
+            # Extract and validate parameters
+            model = request_data.get("model", "all-MiniLM-L6-v2")
+            text_column = request_data.get("text_column")
+            trust_remote_code = request_data.get("trust_remote_code", False)
+            batch_size = request_data.get("batch_size")
+            umap_args = request_data.get("umap_args", {})
+            
+            # Validate required parameters
+            if text_column is None:
+                return JSONResponse({"error": "text_column is required"}, status_code=400)
+            
+            if text_column not in data_source.dataset.columns:
+                return JSONResponse(
+                    {"error": f"Column '{text_column}' not found in dataset"}, 
+                    status_code=400
+                )
+            
+            # Validate umap_args
+            if not isinstance(umap_args, dict):
+                return JSONResponse({"error": "umap_args must be a dictionary"}, status_code=400)
+            
+            # Validate batch_size if provided
+            if batch_size is not None and (not isinstance(batch_size, int) or batch_size <= 0):
+                return JSONResponse({"error": "batch_size must be a positive integer"}, status_code=400)
+            
+            # Reuse existing projection column names or create new ones
+            from .cli import find_column_name
+            
+            # Check if we already have projection columns to reuse
+            existing_embedding = data_source.metadata.get("columns", {}).get("embedding")
+            if existing_embedding and "x" in existing_embedding and "y" in existing_embedding:
+                x_column = existing_embedding["x"]
+                y_column = existing_embedding["y"]
+            else:
+                x_column = find_column_name(data_source.dataset.columns, "projection_x")
+                y_column = find_column_name(data_source.dataset.columns, "projection_y")
+            
+            # Check for existing neighbors column
+            existing_neighbors = data_source.metadata.get("columns", {}).get("neighbors")
+            if existing_neighbors and existing_neighbors in data_source.dataset.columns:
+                neighbors_column = existing_neighbors
+            else:
+                neighbors_column = find_column_name(data_source.dataset.columns, "__neighbors")
+            
+            # Compute new embeddings and projections
+            compute_text_projection(
+                data_source.dataset,
+                text_column,
+                x=x_column,
+                y=y_column,
+                neighbors=neighbors_column,
+                model=model,
+                trust_remote_code=trust_remote_code,
+                batch_size=batch_size,
+                umap_args=umap_args,
+            )
+            
+            # Update metadata
+            data_source.update_embedding_metadata({
+                "x": x_column,
+                "y": y_column,
+            }, neighbors_column, text_column)
+            
+            # Clear the connection cache to reflect updated dataset
+            get_connection.cache_clear()
+            
+            return JSONResponse({
+                "success": True,
+                "message": f"Embeddings computed successfully using model '{model}'",
+                "columns": {
+                    "x": x_column,
+                    "y": y_column,
+                    "neighbors": neighbors_column,
+                    "text": text_column
+                }
+            })
+            
+        except ImportError as e:
+            return JSONResponse(
+                {"error": f"Required package not available: {str(e)}"}, 
+                status_code=500
+            )
+        except Exception as e:
+            return JSONResponse(
+                {"error": f"Failed to compute embeddings: {str(e)}"}, 
+                status_code=500
+            )
+
+    @app.post("/data/embedding")
+    async def post_embedding(req: Request):
+        body = await req.body()
+        data = json.loads(body)
+        return await asyncio.get_running_loop().run_in_executor(
+            executor, lambda: handle_embedding(data)
+        )
+
     # Static files for the frontend
     app.mount("/", StaticFiles(directory=static_path, html=True))
 
