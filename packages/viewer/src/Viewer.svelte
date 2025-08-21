@@ -142,11 +142,13 @@
         
         // Try to force refresh by briefly modifying projectionColumns to trigger re-render
         const originalEmbedding = columns?.embedding;
+        const originalId = columns?.id;
         if (columns && columns.embedding) {
-          columns = { ...columns, embedding: null };
+          // Refresh both embedding view and table by temporarily nulling key columns
+          columns = { ...columns, embedding: null, id: null };
           await new Promise(resolve => setTimeout(resolve, 10));
-          columns = { ...columns, embedding: originalEmbedding };
-          console.log("Forced projectionColumns refresh");
+          columns = { ...columns, embedding: originalEmbedding, id: originalId };
+          console.log("Forced projectionColumns and table refresh");
         }
         
         // Test: Wait a bit longer and check if the visualization eventually updates
