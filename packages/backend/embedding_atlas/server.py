@@ -169,7 +169,50 @@ def make_server(
 
     def handle_embedding(request_data: dict):
         from .projection import compute_text_projection
-        
+
+        # --- helpers ---
+        def model_slug(s: str) -> str:
+            """
+            Keep the model name as close as possible to original:
+            - Preserve letters, digits, underscore, hyphen, and dot.
+            - Replace all other characters with '_'.
+            - Trim leading/trailing underscores introduced by replacements.
+            This keeps `-` (hyphen) and `.` (dot) intact for readability.
+            """
+            s = str(s)
+            s = re.sub(r"[^A-Za-z0-9_.-]+", "_", s)
+            return s.strip("_") or "model"
+
+        def drop_previous_embedding_columns():
+            # Drop columns referenced in metadata (if present)
+            cols_meta = data_source.metadata.get("columns", {})
+            emb_meta = cols_meta.get("embedding", {})
+            old_x = emb_meta.get("x")
+            old_y = emb_meta.get("y")
+            old_neighbors = cols_meta.get("neighbors")
+            to_drop = []
+            for c in (old_x, old_y, old_neighbors):
+                if c and c in data_source.dataset.columns:
+                    to_drop.append(c)
+
+            # Drop any residual projection/neighbor columns by prefix pattern
+            for col in list(data_source.dataset.columns):
+                name = str(col)
+                if (
+                    name.startswith("projection_x")
+                    or name.startswith("projection_y")
+                    or name.startswith("__neighbors")
+                ):
+                    if col not in to_drop:
+                        to_drop.append(col)
+
+            if to_drop:
+                data_source.dataset.drop(
+                    columns=[c for c in to_drop if c in data_source.dataset.columns],
+                    inplace=True,
+                    errors="ignore",
+                )
+
         try:
             # Extract and validate parameters
             model = request_data.get("model", "all-MiniLM-L6-v2")
@@ -177,49 +220,36 @@ def make_server(
             trust_remote_code = request_data.get("trust_remote_code", False)
             batch_size = request_data.get("batch_size")
             umap_args = request_data.get("umap_args", {})
-            
+
             # Validate required parameters
             if text_column is None:
                 return JSONResponse({"error": "text_column is required"}, status_code=400)
-            
+
             if text_column not in data_source.dataset.columns:
                 return JSONResponse(
-                    {"error": f"Column '{text_column}' not found in dataset"}, 
-                    status_code=400
+                    {"error": f"Column '{text_column}' not found in dataset"},
+                    status_code=400,
                 )
-            
-            # Validate umap_args
+
             if not isinstance(umap_args, dict):
                 return JSONResponse({"error": "umap_args must be a dictionary"}, status_code=400)
-            
-            # Validate batch_size if provided
+
             if batch_size is not None and (not isinstance(batch_size, int) or batch_size <= 0):
                 return JSONResponse({"error": "batch_size must be a positive integer"}, status_code=400)
-            
-            # Reuse existing projection column names or create new ones
-            from .cli import find_column_name
-            
-            # Check if we already have projection columns to reuse
-            existing_embedding = data_source.metadata.get("columns", {}).get("embedding")
-            if existing_embedding and "x" in existing_embedding and "y" in existing_embedding:
-                x_column = existing_embedding["x"]
-                y_column = existing_embedding["y"]
-            else:
-                x_column = find_column_name(data_source.dataset.columns, "projection_x")
-                y_column = find_column_name(data_source.dataset.columns, "projection_y")
-            
-            # Check for existing neighbors column
-            existing_neighbors = data_source.metadata.get("columns", {}).get("neighbors")
-            if existing_neighbors and existing_neighbors in data_source.dataset.columns:
-                neighbors_column = existing_neighbors
-            else:
-                neighbors_column = find_column_name(data_source.dataset.columns, "__neighbors")
-            
+
+            # Always create fresh columns and drop any previous ones
+            #drop_previous_embedding_columns()
+
+            mslug = model_slug(model)
+            x_column = f"projection_x__{mslug}"
+            y_column = f"projection_y__{mslug}"
+            neighbors_column = f"__neighbors__{mslug}"
+
             # Debug: Check first row before computation
-            first_row_before = data_source.dataset.iloc[0].to_dict()
+            first_row_before = data_source.dataset.iloc[0].to_dict() if len(data_source.dataset) else {}
             print(f"First row BEFORE embedding computation: {first_row_before}")
-            
-            # Compute new embeddings and projections
+
+            # Compute new embeddings and projections into the fresh columns
             compute_text_projection(
                 data_source.dataset,
                 text_column,
@@ -231,49 +261,66 @@ def make_server(
                 batch_size=batch_size,
                 umap_args=umap_args,
             )
-            
+
             # Debug: Check first row after computation
-            first_row_after = data_source.dataset.iloc[0].to_dict()
+            first_row_after = data_source.dataset.iloc[0].to_dict() if len(data_source.dataset) else {}
             print(f"First row AFTER embedding computation: {first_row_after}")
-            
-            # Update metadata
-            data_source.update_embedding_metadata({
-                "x": x_column,
-                "y": y_column,
-            }, neighbors_column, text_column)
-            
+
+            # Update metadata to reflect the new columns.
+            data_source.update_embedding_metadata(
+                {"x": x_column, "y": y_column},
+                neighbors_column,
+                text_column,
+            )
+
+            # Also record the model used (since we removed UMAP params from names)
+            try:
+                data_source.metadata.setdefault("columns", {})
+                data_source.metadata["columns"].setdefault("embedding_info", {})
+                data_source.metadata["columns"]["embedding_info"].update(
+                    {"model": model}
+                )
+            except Exception as _e:
+                print(f"Warning: could not persist embedding_info into metadata: {_e}")
+
             # Clear the connection cache to reflect updated dataset
             get_connection.cache_clear()
-            
+
             # Clear the dataset.parquet cache to reflect updated dataset
             clear_dataset_cache()
             print("Cleared dataset cache")
-            
+
             # Debug: Test that parquet bytes are actually different
             parquet_bytes = to_parquet_bytes(data_source.dataset)
             print(f"Parquet bytes length after clearing cache: {len(parquet_bytes)}")
-            
-            return JSONResponse({
-                "success": True,
-                "message": f"Embeddings computed successfully using model '{model}'",
-                "columns": {
-                    "x": x_column,
-                    "y": y_column,
-                    "neighbors": neighbors_column,
-                    "text": text_column
+
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": f"Embeddings computed with model '{model}'",
+                    "columns": {
+                        "x": x_column,
+                        "y": y_column,
+                        "neighbors": neighbors_column,
+                        "text": text_column,
+                    },
+                    "provenance": {
+                        "model": model,
+                    },
                 }
-            })
-            
+            )
+
         except ImportError as e:
             return JSONResponse(
-                {"error": f"Required package not available: {str(e)}"}, 
-                status_code=500
+                {"error": f"Required package not available: {str(e)}"},
+                status_code=500,
             )
         except Exception as e:
             return JSONResponse(
-                {"error": f"Failed to compute embeddings: {str(e)}"}, 
-                status_code=500
+                {"error": f"Failed to compute embeddings: {str(e)}"},
+                status_code=500,
             )
+
 
     @app.post("/data/embedding")
     async def post_embedding(req: Request):
@@ -311,7 +358,7 @@ def parse_range_header(request: Request, content_length: int):
 def mount_bytes(
     app: FastAPI, url: str, media_type: str, make_content: Callable[[], bytes]
 ):
-    @lru_cache(maxsize=1)
+    @lru_cache(maxsize=10)
     def get_content() -> bytes:
         print("mount_bytes: Generating fresh content")
         content = make_content()

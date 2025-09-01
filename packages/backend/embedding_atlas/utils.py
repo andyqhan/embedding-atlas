@@ -67,6 +67,7 @@ def load_huggingface_data(filename: str, splits: list[str] | None) -> pd.DataFra
 
 
 def to_parquet_bytes(df: pd.DataFrame) -> bytes:
+    print("Turning dataframe into parquet bytes. First row:", df.iloc[0].to_dict())
     class NoCloseBytesIO(BytesIO):
         def close(self):
             pass

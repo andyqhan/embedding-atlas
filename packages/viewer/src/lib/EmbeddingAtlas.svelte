@@ -429,6 +429,7 @@
     load("embeddingViewMode", (x) => (embeddingViewMode = x));
     load("minimumDensityExpFactor", (x) => (minimumDensityExpFactor = x));
     load("userDarkMode", (x) => ($userDarkMode = x));
+    load("selectedModel", (x) => (selectedModel = x));
 
     if (state.plots != null) {
       plots = state.plots;
@@ -453,10 +454,12 @@
         embeddingViewMode: embeddingViewMode,
         minimumDensityExpFactor: minimumDensityExpFactor,
         userDarkMode: $userDarkMode,
+        selectedModel: selectedModel,
       },
       plots: plots,
       plotStates: $plotStateStores,
       predicate: currentPredicate(),
+      selectedModel: selectedModel,
     };
     onStateChange?.(state);
   });

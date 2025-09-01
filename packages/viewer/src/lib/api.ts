@@ -82,6 +82,8 @@ export interface EmbeddingAtlasState {
   plotStates?: Record<string, any>;
   /** The selection predicate (SQL expression) */
   predicate?: string | null;
+  /** The currently selected embedding model */
+  selectedModel?: string;
 }
 
 export interface Cache {
