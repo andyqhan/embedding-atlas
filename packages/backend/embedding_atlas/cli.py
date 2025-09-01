@@ -5,6 +5,7 @@
 import asyncio
 import logging
 import pathlib
+import re
 import socket
 from pathlib import Path
 
@@ -18,6 +19,19 @@ from .data_source import DataSource
 from .server import make_server
 from .utils import Hasher, load_huggingface_data, load_pandas_data
 from .version import __version__
+
+
+def model_slug(s: str) -> str:
+    """
+    Keep the model name as close as possible to original:
+    - Preserve letters, digits, underscore, hyphen, and dot.
+    - Replace all other characters with '_'.
+    - Trim leading/trailing underscores introduced by replacements.
+    This keeps `-` (hyphen) and `.` (dot) intact for readability.
+    """
+    s = str(s)
+    s = re.sub(r"[^A-Za-z0-9_.-]+", "_", s)
+    return s.strip("_") or "model"
 
 
 def find_column_name(existing_names, candidate):
@@ -252,6 +266,9 @@ def main(
             umap_args["random_state"] = umap_random_state
         if umap_metric is not None:
             umap_args["metric"] = umap_metric
+        # Use consistent default model and create model-specific column names
+        effective_model = model if model is not None else "all-MiniLM-L6-v2"
+        
         # Run embedding and projection
         if text is not None or image is not None or vector is not None:
             from .projection import (
@@ -260,10 +277,12 @@ def main(
                 compute_vector_projection,
             )
 
-            x_column = find_column_name(df.columns, "projection_x")
-            y_column = find_column_name(df.columns, "projection_y")
+            mslug = model_slug(effective_model)
+            
+            x_column = find_column_name(df.columns, f"projection_x__{mslug}")
+            y_column = find_column_name(df.columns, f"projection_y__{mslug}")
             if neighbors_column is None:
-                neighbors_column = find_column_name(df.columns, "__neighbors")
+                neighbors_column = find_column_name(df.columns, f"__neighbors__{mslug}")
                 new_neighbors_column = neighbors_column
             else:
                 # If neighbors_column is already specified, don't overwrite it.
@@ -284,7 +303,7 @@ def main(
                     x=x_column,
                     y=y_column,
                     neighbors=new_neighbors_column,
-                    model=model,
+                    model=effective_model,
                     trust_remote_code=trust_remote_code,
                     batch_size=batch_size,
                     umap_args=umap_args,
@@ -296,13 +315,17 @@ def main(
                     x=x_column,
                     y=y_column,
                     neighbors=new_neighbors_column,
-                    model=model,
+                    model=effective_model,
                     trust_remote_code=trust_remote_code,
                     batch_size=batch_size,
                     umap_args=umap_args,
                 )
             else:
                 raise RuntimeError("unreachable")
+
+    # Define effective_model for cases where we didn't compute embeddings but still need it
+    if 'effective_model' not in locals():
+        effective_model = model if model is not None else "all-MiniLM-L6-v2"
 
     id_column = find_column_name(df.columns, "_row_index")
     df[id_column] = range(df.shape[0])
@@ -319,6 +342,11 @@ def main(
             "x": x_column,
             "y": y_column,
         }
+        # Add embedding info like server does
+        if text is not None or image is not None:  # Only add if we computed embeddings
+            metadata["columns"]["embedding_info"] = {
+                "model": effective_model
+            }
     if neighbors_column is not None:
         metadata["columns"]["neighbors"] = neighbors_column
 

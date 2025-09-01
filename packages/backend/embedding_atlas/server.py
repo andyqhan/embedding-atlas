@@ -284,15 +284,72 @@ def make_server(
                 print(f"Warning: could not persist embedding_info into metadata: {_e}")
 
             # Clear the connection cache to reflect updated dataset
+            print("🗄️  Clearing get_connection cache...")
             get_connection.cache_clear()
+            print("✅ get_connection cache cleared")
+
+            # Verify dataset actually has new columns before clearing cache
+            print(f"🔍 Verifying dataset has new columns before cache clear...")
+            dataset_columns = list(data_source.dataset.columns)
+            print(f"🔍 Dataset columns: {dataset_columns}")
+            if x_column in dataset_columns and y_column in dataset_columns:
+                print(f"✅ Verified dataset has new columns: {x_column}, {y_column}")
+            else:
+                print(f"❌ ERROR: Dataset missing expected columns! Expected: {x_column}, {y_column}")
 
             # Clear the dataset.parquet cache to reflect updated dataset
+            print("🧹 Clearing dataset.parquet cache...")
+            
+            # Clear cache and force immediate regeneration to ensure it works
             clear_dataset_cache()
-            print("Cleared dataset cache")
+            print("✅ dataset.parquet cache cleared")
+            
+            # Force a call to regenerate content immediately to flush any stale references
+            print("🔄 Force regenerating cached content to ensure freshness...")
+            try:
+                # This will force the lru_cache to regenerate content with fresh data
+                _ = to_parquet_bytes(data_source.dataset)
+                print("🔄 Forced fresh content generation completed")
+            except Exception as e:
+                print(f"⚠️  Error forcing fresh content: {e}")
+            
+            # Verify cache was actually cleared by forcing a fresh generation
+            print("🔄 Testing cache clear by requesting fresh content...")
+            test_bytes = to_parquet_bytes(data_source.dataset) 
+            print(f"🔄 Direct parquet generation: {len(test_bytes)} bytes")
+            
+            # Test what the mount_bytes function would return right now
+            try:
+                import pandas as pd
+                import io
+                test_df = pd.read_parquet(io.BytesIO(test_bytes))
+                test_columns = list(test_df.columns)
+                print(f"🔄 Direct generation columns: {test_columns}")
+                if x_column in test_columns and y_column in test_columns:
+                    print("✅ Direct generation has correct columns")
+                else:
+                    print("❌ Direct generation missing expected columns")
+            except Exception as e:
+                print(f"⚠️  Could not test direct generation: {e}")
 
-            # Debug: Test that parquet bytes are actually different
+            # Debug: Test that parquet bytes are actually different and contain new columns
+            print("🔍 Generating fresh parquet bytes to verify content...")
             parquet_bytes = to_parquet_bytes(data_source.dataset)
-            print(f"Parquet bytes length after clearing cache: {len(parquet_bytes)}")
+            print(f"🔍 Fresh parquet bytes length: {len(parquet_bytes)}")
+            
+            # Try to read back the parquet bytes to verify columns
+            try:
+                import pandas as pd
+                import io
+                fresh_df = pd.read_parquet(io.BytesIO(parquet_bytes))
+                fresh_columns = list(fresh_df.columns)
+                print(f"🔍 Columns in fresh parquet: {fresh_columns}")
+                if x_column in fresh_columns and y_column in fresh_columns:
+                    print(f"✅ Fresh parquet contains new embedding columns!")
+                else:
+                    print(f"❌ ERROR: Fresh parquet missing embedding columns!")
+            except Exception as e:
+                print(f"⚠️  Could not verify parquet content: {e}")
 
             return JSONResponse(
                 {
@@ -360,13 +417,26 @@ def mount_bytes(
 ):
     @lru_cache(maxsize=10)
     def get_content() -> bytes:
-        print("mount_bytes: Generating fresh content")
+        print(f"🔄 mount_bytes: Generating fresh content for {url}")
         content = make_content()
-        print(f"mount_bytes: Generated {len(content)} bytes")
+        print(f"🔄 mount_bytes: Generated {len(content)} bytes")
+        
+        # Debug: Check what columns are in the generated content
+        if url == "/data/dataset.parquet":
+            try:
+                import pandas as pd
+                import io
+                df = pd.read_parquet(io.BytesIO(content))
+                columns = list(df.columns)
+                print(f"🔄 mount_bytes: Dataset columns in generated parquet: {columns}")
+            except Exception as e:
+                print(f"🔄 mount_bytes: Could not read generated parquet: {e}")
+        
         return content
 
     @app.head(url)
     async def head(request: Request):
+        print(f"📥 HEAD request to {url} - Query params: {dict(request.query_params)}")
         content = get_content()
         bytes_range = parse_range_header(request, len(content))
         if bytes_range is None:
@@ -385,6 +455,7 @@ def mount_bytes(
 
     @app.get(url)
     async def get(request: Request):
+        print(f"📥 GET request to {url} - Query params: {dict(request.query_params)}")
         content = get_content()
         bytes_range = parse_range_header(request, len(content))
         if bytes_range is None:
