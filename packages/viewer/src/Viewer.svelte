@@ -35,6 +35,7 @@
   let error = $state(false);
   let status = $state("Loading...");
   let initialState: any | null = $state(null);
+  let currentState: any | null = $state(null);
   let columns: DataColumns | null = $state(null);
   let rebuilding = $state(false);
   let selectedModel = $state("all-MiniLM-L6-v2");
@@ -202,6 +203,7 @@
   }
 
   function onStateChange(state: EmbeddingAtlasState) {
+    currentState = state;
     setQueryPayload({ ...state, predicate: undefined, selectedModel: selectedModel });
   }
 
@@ -224,7 +226,7 @@
       <EmbeddingAtlas
         coordinator={coordinator}
         table="dataset"
-        initialState={initialState}
+        initialState={currentState || initialState}
         idColumn={columns.id}
         textColumn={columns.text}
         projectionColumns={columns.embedding}
