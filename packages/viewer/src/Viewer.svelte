@@ -203,7 +203,20 @@
   }
 
   function onStateChange(state: EmbeddingAtlasState) {
-    currentState = state;
+    // Create a copy of the state without the embedding viewport to avoid persisting 
+    // coordinates that are meaningless when the projection/model changes
+    const stateWithoutEmbeddingViewport = {
+      ...state,
+      plotStates: state.plotStates ? {
+        ...state.plotStates,
+        "embedding-view": state.plotStates["embedding-view"] ? {
+          ...state.plotStates["embedding-view"],
+          viewportState: null  // Reset viewport when model changes
+        } : undefined
+      } : undefined
+    };
+    
+    currentState = stateWithoutEmbeddingViewport;  // used for persisting UI state when model changes
     setQueryPayload({ ...state, predicate: undefined, selectedModel: selectedModel });
   }
 
