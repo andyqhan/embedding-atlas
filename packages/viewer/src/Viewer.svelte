@@ -42,8 +42,6 @@
 
   let projectionKey = $derived.by(() => {
     const key = columns ? `${columns.embedding?.x ?? ""}:${columns.embedding?.y ?? ""}` : "";
-    console.log(`🗝️  PROJECTION KEY UPDATED: '${key}'`);
-    console.log(`🗝️  Current columns.embedding:`, columns?.embedding);
     return key;
   });
 
@@ -84,12 +82,7 @@
   async function onModelChange(model: string) {
     if (!dataSource.computeEmbeddings || !columns?.text) return;
     
-    console.log(`🔄 MODEL CHANGE: User selected model '${model}'`);
-    console.log(`🔄 Previous selectedModel: '${selectedModel}'`);
-    console.log(`🔄 Current columns state:`, columns);
-    
     selectedModel = model;
-    console.log(`🔄 Updated selectedModel to: '${selectedModel}'`);
     
     await onComputeEmbeddings(model, columns.text);
   }
@@ -97,28 +90,17 @@
   async function onComputeEmbeddings(model: string, textColumn: string) {
     if (!dataSource.computeEmbeddings) return;
 
-    console.log(`🚀 STARTING onComputeEmbeddings: model='${model}', text='${textColumn}'`);
-
     try {
       rebuilding = true;
       status = "Recomputing embeddings...";
       
-      console.log(`📡 Step 1: Calling backend computeEmbeddings...`);
       await dataSource.computeEmbeddings(model, textColumn);
-      console.log("✅ Step 1: Backend embedding computation completed.");
 
       // Refresh the metadata so we pick up the new column names (`embedding.x/y`, `neighbors`)
       if ("metadata" in dataSource) {
         status = "Updating metadata...";
-        console.log(`📋 Step 2: Fetching fresh metadata from server...`);
         const metadata = await (dataSource as any).metadata();
-        console.log(`📋 Step 2: Raw metadata received:`, metadata);
-        
-        const oldColumns = columns;
         columns = metadata.columns;
-        console.log(`📋 Step 2: OLD columns:`, oldColumns);
-        console.log(`📋 Step 2: NEW columns:`, columns);
-        console.log(`📋 Step 2: Expected embedding columns: x='${columns?.embedding?.x}', y='${columns?.embedding?.y}'`);
       }
 
       // Rebuild the DuckDB `dataset` table from fresh parquet so the new columns exist in the DB
@@ -129,9 +111,6 @@
         const datasetUrl =
           serverUrl + (serverUrl.endsWith("/") ? "" : "/") + `dataset.parquet?t=${ts}`;
 
-        console.log(`🔄 Step 3: Rebuilding DuckDB table from: ${datasetUrl}`);
-        console.log(`🔄 Step 3: SQL command: CREATE OR REPLACE TABLE dataset AS (SELECT * FROM read_parquet('${datasetUrl}'))`);
-        
         await withTimeout(
           coordinator.exec(
             `
@@ -143,62 +122,18 @@
           30000, // 30 second timeout
           "Table rebuild operation"
         );
-        console.log("✅ Step 3: Table rebuild SQL executed successfully.");
 
-        // Verify the new columns exist in the rebuilt table by actually querying them
-        if (columns?.embedding?.x && columns?.embedding?.y) {
-          status = "Verifying table structure...";
-          console.log(`🔍 Step 4: Verifying columns exist in rebuilt table...`);
-          console.log(`🔍 Step 4: Looking for: x='${columns.embedding.x}', y='${columns.embedding.y}'`);
-          
-          try {
-            // Test X column accessibility
-            // For some reason, DESCRIBE doesn't work here -- it has to be SELECT. Some kind of race condition.
-            await withTimeout(
-              coordinator.query(`SELECT COUNT(*) FROM dataset WHERE "${columns.embedding.x}" IS NOT NULL OR "${columns.embedding.x}" IS NULL`),
-              10000, // 10 second timeout
-              "X column verification query"
-            );
-            console.log(`✅ Step 4: X column '${columns.embedding.x}' is accessible`);
-            
-            // Test Y column accessibility
-            await withTimeout(
-              coordinator.query(`SELECT COUNT(*) FROM dataset WHERE "${columns.embedding.y}" IS NOT NULL OR "${columns.embedding.y}" IS NULL`),
-              10000, // 10 second timeout
-              "Y column verification query"
-            );
-            console.log(`✅ Step 4: Y column '${columns.embedding.y}' is accessible`);
-            
-            console.log("✅ Step 4: Column verification passed!");
-          } catch (error: any) {
-            console.error(`❌ Step 4: Column verification failed:`, error);
-            if (error.message?.includes(columns.embedding.x)) {
-              throw new Error(`Expected embedding X column '${columns.embedding.x}' not found in rebuilt table: ${error.message}`);
-            } else if (error.message?.includes(columns.embedding.y)) {
-              throw new Error(`Expected embedding Y column '${columns.embedding.y}' not found in rebuilt table: ${error.message}`);
-            } else {
-              throw new Error(`Table verification failed: ${error.message}`);
-            }
-          }
-        }
       }
 
       // Clear caches so downstream queries/plots see the new schema and data
       status = "Refreshing components...";
-      console.log(`🧹 Step 5: Clearing coordinator caches...`);
       coordinator.clear();
-      console.log("✅ Step 5: Coordinator caches cleared.");
-
-      console.log(`🎉 COMPLETED: Embedding recompute finished successfully!`);
-      console.log(`🎉 Final state - embedding columns:`, columns?.embedding);
-      console.log(`🎉 Final state - neighbors column:`, columns?.neighbors);
       
       rebuilding = false;
       status = "Ready";
     } catch (error) {
       rebuilding = false;
-      console.error("💥 FAILED: onComputeEmbeddings error:", error);
-      throw error; // Crash loudly on any failure
+      throw error;
     }
   }
 
@@ -220,17 +155,6 @@
     setQueryPayload({ ...state, predicate: undefined, selectedModel: selectedModel });
   }
 
-  // Track when EmbeddingAtlas is about to be rendered/re-rendered
-  $effect(() => {
-    if (ready && columns != null && !rebuilding) {
-      console.log(`🎨 RENDERING EmbeddingAtlas with key: '${projectionKey}'`);
-      console.log(`🎨 Current columns.embedding:`, columns?.embedding);
-      console.log(`🎨 Current selectedModel: '${selectedModel}'`);
-      console.log(`🎨 Current rebuilding state: ${rebuilding}`);
-    } else {
-      console.log(`⏸️  NOT RENDERING EmbeddingAtlas - ready:${ready}, columns:${!!columns}, rebuilding:${rebuilding}`);
-    }
-  });
 </script>
 
 <div class="fixed left-0 right-0 top-0 bottom-0">

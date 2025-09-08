@@ -469,7 +469,6 @@
       plots = await tableInfo.defaultPlots(columns.filter((x) => ignoreColumns.indexOf(x.name) < 0));
     }
     initialized = true;
-    console.log(`in EmbeddingTable.svelte mount. columns: ${(columns.map((x) => x.name)).toString()}`);
   });
 
   function onWindowKeydown(e: KeyboardEvent) {

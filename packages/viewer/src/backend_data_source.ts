@@ -96,7 +96,7 @@ export class BackendDataSource implements DataSource {
   private async fetchEndpoint(endpoint: string, init?: RequestInit) {
     let resp = await fetch(joinUrl(this.serverUrl, endpoint), init);
     if (resp.status != 200) {
-      throw new Error("ERROR FETCH");
+      throw new Error(`Failed to fetch ${endpoint}: ${resp.status} ${resp.statusText}`);
     }
     return resp;
   }
