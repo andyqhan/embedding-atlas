@@ -2,6 +2,13 @@
 
 """Command line interface."""
 
+# Default values for embedding/projection parameters
+DEFAULT_TEXT_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_IMAGE_MODEL = "google/vit-base-patch16-384"
+DEFAULT_UMAP_METRIC = "cosine"
+DEFAULT_TEXT_BATCH_SIZE = 32  # What gets used internally
+DEFAULT_IMAGE_BATCH_SIZE = 16
+
 import asyncio
 import logging
 import pathlib
@@ -182,7 +189,7 @@ def find_available_port(start_port: int, max_attempts: int = 10, host="localhost
 )
 @click.option(
     "--umap-metric",
-    default="cosine",
+    default=DEFAULT_UMAP_METRIC,
     help="Distance metric for UMAP computation (default: 'cosine').",
 )
 @click.option(
@@ -267,7 +274,12 @@ def main(
         if umap_metric is not None:
             umap_args["metric"] = umap_metric
         # Use consistent default model and create model-specific column names
-        effective_model = model if model is not None else "all-MiniLM-L6-v2"
+        if text is not None:
+            effective_model = model if model is not None else DEFAULT_TEXT_MODEL
+        elif image is not None:
+            effective_model = model if model is not None else DEFAULT_IMAGE_MODEL
+        else:
+            effective_model = model if model is not None else DEFAULT_TEXT_MODEL
         
         # Run embedding and projection
         if text is not None or image is not None or vector is not None:
@@ -325,7 +337,7 @@ def main(
 
     # Define effective_model for cases where we didn't compute embeddings but still need it
     if 'effective_model' not in locals():
-        effective_model = model if model is not None else "all-MiniLM-L6-v2"
+        effective_model = model if model is not None else DEFAULT_TEXT_MODEL
 
     id_column = find_column_name(df.columns, "_row_index")
     df[id_column] = range(df.shape[0])

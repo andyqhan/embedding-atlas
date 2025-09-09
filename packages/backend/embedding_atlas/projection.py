@@ -7,6 +7,57 @@ import numpy as np
 import pandas as pd
 
 from .utils import Hasher, cache_path, logger
+from .cli import DEFAULT_TEXT_MODEL, DEFAULT_IMAGE_MODEL, DEFAULT_UMAP_METRIC, DEFAULT_TEXT_BATCH_SIZE, DEFAULT_IMAGE_BATCH_SIZE
+
+
+def normalize_text_projection_params(model, batch_size, umap_args, trust_remote_code):
+    """
+    Normalize text projection parameters to ensure consistent cache keys.
+    Applies CLI defaults to ensure same parameters are used regardless of source.
+    """
+    if model is None:
+        model = DEFAULT_TEXT_MODEL
+
+    if batch_size is None:
+        batch_size = DEFAULT_TEXT_BATCH_SIZE
+    
+    normalized_umap_args = {}
+    
+    if "metric" not in umap_args or umap_args.get("metric") is None:
+        normalized_umap_args["metric"] = DEFAULT_UMAP_METRIC
+    else:
+        normalized_umap_args["metric"] = umap_args["metric"]
+    
+    for key in ["n_neighbors", "min_dist", "random_state"]:
+        if key in umap_args:
+            normalized_umap_args[key] = umap_args[key]
+    
+    return model, batch_size, normalized_umap_args, trust_remote_code
+
+
+def normalize_image_projection_params(model, batch_size, umap_args, trust_remote_code):
+    """
+    Normalize image projection parameters to ensure consistent cache keys.
+    Applies CLI defaults to ensure same parameters are used regardless of source.
+    """
+    if model is None:
+        model = DEFAULT_IMAGE_MODEL
+
+    if batch_size is None:
+        batch_size = DEFAULT_IMAGE_BATCH_SIZE
+    
+    normalized_umap_args = {}
+    
+    if "metric" not in umap_args or umap_args.get("metric") is None:
+        normalized_umap_args["metric"] = DEFAULT_UMAP_METRIC
+    else:
+        normalized_umap_args["metric"] = umap_args["metric"]
+    
+    for key in ["n_neighbors", "min_dist", "random_state"]:
+        if key in umap_args:
+            normalized_umap_args[key] = umap_args[key]
+    
+    return model, batch_size, normalized_umap_args, trust_remote_code
 
 
 @dataclass
@@ -70,7 +121,7 @@ def _run_umap(
     import umap
     from umap.umap_ import nearest_neighbors
 
-    metric = umap_args.get("metric", "cosine")
+    metric = umap_args.get("metric", DEFAULT_UMAP_METRIC)
     n_neighbors = umap_args.get("n_neighbors", 15)
 
     knn = nearest_neighbors(
@@ -95,8 +146,11 @@ def _projection_for_texts(
     batch_size: int | None = None,
     umap_args: dict = {},
 ) -> Projection:
-    if model is None:
-        model = "all-MiniLM-L6-v2"
+    # Normalize parameters to ensure consistent cache keys
+    model, batch_size, umap_args, trust_remote_code = normalize_text_projection_params(
+        model, batch_size, umap_args, trust_remote_code
+    )
+    
     hasher = Hasher()
     hasher.update(
         {
@@ -119,7 +173,7 @@ def _projection_for_texts(
 
     # Set default batch size if not provided
     if batch_size is None:
-        batch_size = 32
+        batch_size = DEFAULT_TEXT_BATCH_SIZE
         logger.info("Using default batch size of %d for text. Adjust with --batch-size if you encounter memory issues or want to speed up processing.", batch_size)
 
     logger.info("Loading model %s...", model)
@@ -140,8 +194,11 @@ def _projection_for_images(
     batch_size: int | None = None,
     umap_args: dict = {},
 ) -> Projection:
-    if model is None:
-        model = "google/vit-base-patch16-384"
+    # Normalize parameters to ensure consistent cache keys
+    model, batch_size, umap_args, trust_remote_code = normalize_image_projection_params(
+        model, batch_size, umap_args, trust_remote_code
+    )
+    
     hasher = Hasher()
     hasher.update(
         {
@@ -181,7 +238,7 @@ def _projection_for_images(
 
     # Set default batch size if not provided
     if batch_size is None:
-        batch_size = 16
+        batch_size = DEFAULT_IMAGE_BATCH_SIZE
         logger.info("Using default batch size of %d for images. Adjust with --batch-size if you encounter memory issues or want to speed up processing.", batch_size)
     
     logger.info("Running embedding for %d images with batch size %d...", len(images), batch_size)
@@ -263,9 +320,6 @@ def compute_text_projection(
             {"distances": b, "ids": a}  # ID is always the same as the row index.
             for a, b in zip(proj.knn_indices, proj.knn_distances)
         ]
-
-    print(f"done computing text projection in compute_text_projection with model {model}")
-    print("first row: ", data_frame.iloc[0].to_dict())
 
 
 def compute_vector_projection(

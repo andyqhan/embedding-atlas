@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .data_source import DataSource
 from .utils import to_parquet_bytes
+from .cli import DEFAULT_TEXT_MODEL
 
 
 def make_server(
@@ -215,7 +216,7 @@ def make_server(
 
         try:
             # Extract and validate parameters
-            model = request_data.get("model", "all-MiniLM-L6-v2")
+            model = request_data.get("model", DEFAULT_TEXT_MODEL)
             text_column = request_data.get("text_column")
             trust_remote_code = request_data.get("trust_remote_code", False)
             batch_size = request_data.get("batch_size")
@@ -244,7 +245,6 @@ def make_server(
             x_column = f"projection_x__{mslug}"
             y_column = f"projection_y__{mslug}"
             neighbors_column = f"__neighbors__{mslug}"
-
 
             # Compute new embeddings and projections into the fresh columns
             compute_text_projection(
@@ -277,13 +277,10 @@ def make_server(
             except Exception as _e:
                 print(f"Warning: could not persist embedding_info into metadata: {_e}")
 
-            # Clear the connection cache to reflect updated dataset
-            get_connection.cache_clear()
-
 
             # Clear the dataset.parquet cache to reflect updated dataset
             clear_dataset_cache()
-            
+
             # Force a call to regenerate content immediately to flush any stale references
             try:
                 # This will force the lru_cache to regenerate content with fresh data
@@ -372,9 +369,6 @@ def mount_bytes(
             headers={
                 "Content-Length": str(length),
                 "Content-Type": media_type,
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
             }
         )
 
@@ -385,11 +379,6 @@ def mount_bytes(
         if bytes_range is None:
             return Response(
                 content=content,
-                headers={
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache", 
-                    "Expires": "0",
-                }
             )
         else:
             r0, r1 = bytes_range
@@ -400,9 +389,6 @@ def mount_bytes(
                     "Content-Length": str(r1 - r0),
                     "Content-Range": f"bytes {r0}-{r1 - 1}/{len(content)}",
                     "Content-Type": media_type,
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                    "Expires": "0",
                 },
                 media_type=media_type,
                 status_code=206,
