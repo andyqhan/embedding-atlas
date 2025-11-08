@@ -73,7 +73,7 @@ Python package providing CLI tool and Jupyter widget.
 - **WebSocket Mode** (`type: "socket"`): Real-time connection to DuckDB server
 
 ### Data Source Modes
-Supports both text and images. The default text model is Qwen3-Embedding-0.6B, and the default image model is google/vit-base-patch16-384.
+Supports both text and images. The default text model is Qwen/Qwen3-Embedding-0.6B, and the default image model is google/vit-base-patch16-384.
 - **Backend Data Source**: Loads from FastAPI server endpoints
 - **Test Data Source**: Generates synthetic data for development
 - **File Upload Mode**: Direct CSV/Parquet upload interface

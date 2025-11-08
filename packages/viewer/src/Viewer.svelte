@@ -38,7 +38,7 @@
   let currentState: any | null = $state(null);
   let columns: DataColumns | null = $state(null);
   let rebuilding = $state(false);
-  let selectedModel = $state("all-MiniLM-L6-v2");
+  let selectedModel = $state("Qwen/Qwen3-Embedding-0.6B");
 
   let projectionKey = $derived.by(() => {
     const key = columns ? `${columns.embedding?.x ?? ""}:${columns.embedding?.y ?? ""}` : "";

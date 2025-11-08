@@ -21,7 +21,7 @@ uv run embedding-atlas ~/data/my_dataset.parquet --text content
 **Common Options:**
 - `--text <column>`: Column containing text data to embed
 - `--image <column>`: Column containing image data to embed
-- `--model <model_name>`: Specify embedding model (default: Qwen3-Embedding-0.6B for text)
+- `--model <model_name>`: Specify embedding model (default: Qwen/Qwen3-Embedding-0.6B for text)
 - `--port <port>`: Server port (default: 5055)
 - `--host <host>`: Server host (default: localhost)
 
@@ -117,7 +117,7 @@ For development with the frontend, run this in a separate terminal from the fron
 **Body**:
 ```json
 {
-  "model": "Qwen3-Embedding-0.6B",
+  "model": "Qwen/Qwen3-Embedding-0.6B",
   "text_column": "content",
   "trust_remote_code": false,
   "batch_size": 32,
@@ -137,7 +137,7 @@ For development with the frontend, run this in a separate terminal from the fron
 ```json
 {
   "success": true,
-  "message": "Embeddings computed successfully using model 'Qwen3-Embedding-0.6B'",
+  "message": "Embeddings computed successfully using model 'Qwen/Qwen3-Embedding-0.6B'",
   "columns": {
     "x": "projection_x",
     "y": "projection_y",

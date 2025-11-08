@@ -543,8 +543,8 @@
                 onChange={handleModelChange}
                 disabled={isComputingEmbeddings}
                 options={[
-                  { value: "all-MiniLM-L6-v2", label: "all-MiniLM-L6-v2" },
                   { value: "Qwen/Qwen3-Embedding-0.6B", label: "Qwen3-Embedding-0.6B" },
+                  { value: "all-MiniLM-L6-v2", label: "all-MiniLM-L6-v2" },
                   { value: "ibm-granite/granite-embedding-english-r2", label: "Granite Embedding" }
                 ]}
               />
