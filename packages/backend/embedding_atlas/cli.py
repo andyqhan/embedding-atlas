@@ -3,7 +3,7 @@
 """Command line interface."""
 
 # Default values for embedding/projection parameters
-DEFAULT_TEXT_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_TEXT_MODEL = "Qwen3-Embedding-0.6B"
 DEFAULT_IMAGE_MODEL = "google/vit-base-patch16-384"
 DEFAULT_UMAP_METRIC = "cosine"
 DEFAULT_TEXT_BATCH_SIZE = 32  # What gets used internally
@@ -142,7 +142,7 @@ def find_available_port(start_port: int, max_attempts: int = 10, host="localhost
 @click.option(
     "--model",
     default=None,
-    help="Model name for generating embeddings (e.g., 'all-MiniLM-L6-v2').",
+    help="Model name for generating embeddings (e.g., 'Qwen3-Embedding-0.6B').",
 )
 @click.option(
     "--trust-remote-code",
