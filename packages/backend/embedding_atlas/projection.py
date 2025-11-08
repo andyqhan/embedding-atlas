@@ -131,9 +131,11 @@ def _run_umap(
         metric_kwds=None,
         angular=False,
         random_state=None,
+        n_jobs=1,  # Disable multiprocessing to avoid semaphore leaks
+        verbose=False,
     )
 
-    proj = umap.UMAP(**umap_args, precomputed_knn=knn)
+    proj = umap.UMAP(**umap_args, precomputed_knn=knn, n_jobs=1, verbose=False)
     result: np.ndarray = proj.fit_transform(hidden_vectors)  # type: ignore
 
     return Projection(projection=result, knn_indices=knn[0], knn_distances=knn[1])
